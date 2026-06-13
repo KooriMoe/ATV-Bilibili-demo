@@ -12,7 +12,11 @@ import UIKit
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-    var window: UIWindow?
+    var window: UIWindow? {
+        return UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.delegate as? SceneDelegate }
+            .first?.window
+    }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         Logger.setup()
@@ -21,27 +25,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         AccountManager.shared.bootstrap()
         BiliBiliUpnpDMR.shared.start()
         URLSession.shared.configuration.headers.add(.userAgent("BiLiBiLi AppleTV Client/1.0.0 (github/yichengchen/ATV-Bilibili-live-demo)"))
-        window = UIWindow()
-        if ApiRequest.isLogin() {
-            if let expireDate = ApiRequest.getToken()?.expireDate {
-                let now = Date()
-                if expireDate.timeIntervalSince(now) < 60 * 60 * 30 {
-                    ApiRequest.refreshToken()
-                }
-            } else {
-                ApiRequest.refreshToken()
-            }
-            window?.rootViewController = BLTabBarViewController()
-        } else {
-            window?.rootViewController = LoginViewController.create()
-        }
         WebRequest.requestIndex()
-        window?.makeKeyAndVisible()
         return true
     }
 
-    func applicationDidBecomeActive(_ application: UIApplication) {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
     }
 
     func showLogin() {
