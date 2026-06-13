@@ -11,6 +11,7 @@ class BrotliDecompressor {
     private let bufferPool = DecompressionBufferPool()
 
     func decompressed(compressed: Data) -> Data? {
+        guard !compressed.isEmpty else { return nil }
         let decodedCapacity = bufferPool.bufferSize
         let decodedDestinationBuffer = bufferPool.getBuffer()
         defer {
@@ -18,16 +19,25 @@ class BrotliDecompressor {
         }
 
         let decompressed: Data? = compressed.withUnsafeBytes { encodedSourceBuffer in
-            let typedPointer = encodedSourceBuffer.bindMemory(to: UInt8.self)
+            guard let base = encodedSourceBuffer.bindMemory(to: UInt8.self).baseAddress else { return nil }
             let decodedCharCount = compression_decode_buffer(
                 decodedDestinationBuffer,
                 decodedCapacity,
-                typedPointer.baseAddress!, compressed.count,
+                base, compressed.count,
                 nil,
                 COMPRESSION_BROTLI
             )
             if decodedCharCount == 0 {
                 return nil
+            }
+            if decodedCharCount == decodedCapacity {
+                // Output filled the buffer exactly -> likely truncated. Retry once with a larger buffer
+                // (popular rooms can exceed 1MB after Brotli expansion).
+                let bigCapacity = decodedCapacity * 8
+                let bigBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bigCapacity)
+                defer { bigBuffer.deallocate() }
+                let n = compression_decode_buffer(bigBuffer, bigCapacity, base, compressed.count, nil, COMPRESSION_BROTLI)
+                return n > 0 ? Data(bytes: bigBuffer, count: n) : nil
             }
 
             return Data(bytes: decodedDestinationBuffer, count: decodedCharCount)

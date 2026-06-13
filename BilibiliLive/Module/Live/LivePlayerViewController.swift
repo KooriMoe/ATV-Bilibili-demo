@@ -22,7 +22,11 @@ class LivePlayerViewController: CommonPlayerViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        viewModel = LivePlayerViewModel(room: room!)
+        guard let room else {
+            showErrorAlertAndExit(message: "缺少直播间信息")
+            return
+        }
+        viewModel = LivePlayerViewModel(room: room)
         viewModel?.onPluginReady = { [weak self] plugins in
             DispatchQueue.main.async {
                 plugins.forEach { self?.addPlugin(plugin: $0) }

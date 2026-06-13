@@ -12,18 +12,25 @@ class VideoDanmuFilter {
 
     private var stringFilters = [String]()
     private var regexFilters = [Regex<AnyRegexOutput>]()
+    // accept() is called from background danmu-fetch tasks while update() may replace the arrays; guard
+    // both with a lock (copy-on-read, since update() runs rarely).
+    private let lock = NSLock()
     private init() {
         refreshCache(rules: VideoDanmuFilterStorage.filters)
     }
 
     func accept(_ danmu: String) -> Bool {
-        for filter in stringFilters {
+        lock.lock()
+        let strings = stringFilters
+        let regexes = regexFilters
+        lock.unlock()
+        for filter in strings {
             if danmu.contains(filter) {
                 return false
             }
         }
 
-        for filter in regexFilters {
+        for filter in regexes {
             if danmu.contains(filter) {
                 return false
             }
@@ -52,20 +59,24 @@ class VideoDanmuFilter {
     }
 
     private func refreshCache(rules: [VideoDanmuFilterData.Rule]) {
-        stringFilters.removeAll()
-        regexFilters.removeAll()
+        var newStrings = [String]()
+        var newRegexes = [Regex<AnyRegexOutput>]()
         for filter in rules {
             switch filter.type {
             case 0:
-                stringFilters.append(filter.filter)
+                newStrings.append(filter.filter)
             case 1:
                 if let regex = try? Regex(filter.filter) {
-                    regexFilters.append(regex)
+                    newRegexes.append(regex)
                 }
             default:
                 break
             }
         }
+        lock.lock()
+        stringFilters = newStrings
+        regexFilters = newRegexes
+        lock.unlock()
     }
 }
 

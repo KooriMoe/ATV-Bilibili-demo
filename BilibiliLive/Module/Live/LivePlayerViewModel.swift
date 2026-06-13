@@ -40,6 +40,12 @@ class LivePlayerViewModel {
             self?.playerDidFailToPlay()
         }
 
+        // Reset the failover counter once a line actually starts playing, so transient failures earlier in
+        // a long session don't accumulate toward the retry cap.
+        playPlugin.onPlayStart = { [weak self] in
+            self?.retryCount = 0
+        }
+
         debugPlugin.additionDebugInfo = { [weak self] in
             self?.debugInfo() ?? ""
         }

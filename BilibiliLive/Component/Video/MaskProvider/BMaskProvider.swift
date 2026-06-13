@@ -17,7 +17,13 @@ class BMaskProvider: MaskProvider {
     let videoSize: CGSize
     private var maskFrames = [MaskFrame]()
     private let maskFramesLock = NSLock()
-    private lazy var shapeLayer = CAShapeLayer()
+    private lazy var shapeLayer: CAShapeLayer = {
+        let layer = CAShapeLayer()
+        layer.fillColor = UIColor.white.cgColor
+        layer.strokeColor = UIColor.white.cgColor
+        layer.backgroundColor = UIColor.clear.cgColor
+        return layer
+    }()
 
     private var lastTime: TimeInterval = 0
     private var downloadTask: Task<Void, Never>?
@@ -82,7 +88,9 @@ class BMaskProvider: MaskProvider {
 
             var buffer2 = buffer.subdata(in: 0..<Data.Index(length))
             buffer = buffer.subdata(in: Int(length)..<buffer.count)
-            buffer2 = try! buffer2.gunzipped()
+            // Per-segment data is network-sourced; skip a bad segment instead of crashing the whole track.
+            guard let unzipped = try? buffer2.gunzipped() else { continue }
+            buffer2 = unzipped
             var segmentFrames = [MaskFrame]()
             autoreleasepool {
                 while buffer2.count > 0 {
@@ -97,10 +105,11 @@ class BMaskProvider: MaskProvider {
                     }
                     lastTime = time
                     let b64Data = buffer2[12..<12 + Int(offset)]
-                    var b64String = String(data: b64Data, encoding: .utf8)!.replacingOccurrences(of: "\n", with: "")
+                    guard let raw = String(data: b64Data, encoding: .utf8) else { continue }
+                    var b64String = raw.replacingOccurrences(of: "\n", with: "")
                     b64String = String(b64String.components(separatedBy: ";base64,").last ?? b64String)
-                    let newb64Data = Data(base64Encoded: b64String)!
-                    let decodedString = String(data: newb64Data, encoding: .utf8)!
+                    guard let newb64Data = Data(base64Encoded: b64String),
+                          let decodedString = String(data: newb64Data, encoding: .utf8) else { continue }
 
                     let paths = SVGBezierPath.paths(fromSVGString: decodedString)
 
@@ -133,11 +142,8 @@ class BMaskProvider: MaskProvider {
         if time < 0 { return }
         let path = getLatestMaskFrame(byMiliSeconds: UInt32(time * Double(1000)))
         if path != nil {
+            // Colors are constant and set once in the lazy initializer; only the path/frame change per frame.
             shapeLayer.path = path
-            shapeLayer.fillColor = UIColor.white.cgColor
-            shapeLayer.backgroundColor = UIColor.white.cgColor
-            shapeLayer.strokeColor = UIColor.white.cgColor
-            shapeLayer.backgroundColor = UIColor.clear.cgColor
             shapeLayer.frame = frame
             onGet(shapeLayer)
         }

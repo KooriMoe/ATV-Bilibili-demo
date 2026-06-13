@@ -10,6 +10,7 @@ import Foundation
 
 class URLPlayPlugin: NSObject {
     var onPlayFail: (() -> Void)?
+    var onPlayStart: (() -> Void)?
 
     private weak var playerVC: AVPlayerViewController?
     private let referer: String
@@ -27,7 +28,11 @@ class URLPlayPlugin: NSObject {
             "User-Agent": Keys.userAgent,
             "Referer": referer,
         ]
-        let asset = AVURLAsset(url: URL(string: urlString)!, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        guard let url = URL(string: urlString) else {
+            onPlayFail?()
+            return
+        }
+        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
         let playerItem = AVPlayerItem(asset: asset)
         let player = AVPlayer(playerItem: playerItem)
         player.automaticallyWaitsToMinimizeStalling = !isLive
@@ -43,6 +48,10 @@ extension URLPlayPlugin: CommonPlayerPlugin {
         if let currentUrl {
             play(urlString: currentUrl)
         }
+    }
+
+    func playerDidStart(player: AVPlayer) {
+        onPlayStart?()
     }
 
     func playerDidFail(player: AVPlayer) {

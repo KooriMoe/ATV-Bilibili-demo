@@ -33,12 +33,13 @@ enum SidxParseUtil {
 
     static func processIndexData(data: Data) -> Sidx? {
         var offset: UInt64 = 0
-        var typeString = ""
         var sidx: Sidx?
         while offset < data.count - 8 {
             var size = UInt64(data.getUint32(offset: &offset))
             let typeArr = data.getUint32(offset: &offset).toUInt8s
-            typeString = String(bytes: typeArr, encoding: .utf8)!
+            // The box bytes come from a network-downloaded (CDN/PCDN) segment index; a corrupt/truncated
+            // response can yield non-UTF8 here. Bail instead of force-unwrapping and crashing playback.
+            guard let typeString = String(bytes: typeArr, encoding: .utf8) else { return sidx }
             switch typeString {
             case "sidx":
                 if size == 1 {
@@ -89,6 +90,9 @@ enum SidxParseUtil {
 
         var infos = [Sidx.SegmentInfo]()
         for _ in 0..<reference_count {
+            // reference_count is attacker/CDN-controlled (up to 65535); stop before reading past a
+            // truncated box (each entry reads 12 bytes via three getUint32 calls).
+            guard offset + 12 <= UInt64(data.count) else { break }
             var code = data.getUint32(offset: &offset)
             let reference_type = (code >> 31) & 1
             let referenced_size = (code & 0x7fffffff)

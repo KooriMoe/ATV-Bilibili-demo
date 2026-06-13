@@ -9,6 +9,10 @@ import Foundation
 import Swifter
 import SwiftyJSON
 
+enum NVAError: Error {
+    case decode
+}
+
 public func nvasocket(
     uuid: String,
     didConnect: ((NVASession) -> Void)? = nil,
@@ -84,7 +88,9 @@ public class NVASession: Hashable, Equatable {
         let versions = try socket.read(length: 4)
         let version = Data(versions).reversed().withUnsafeBytes({ $0.load(as: UInt32.self) })
         frame.version = Int(version)
-        currentVersion = frame.version
+        let frameVersion = frame.version
+        // Keep all currentVersion access on socketQueue so it stays serialized with the send path.
+        socketQueue.async { [weak self] in self?.currentVersion = frameVersion }
 
         if frame.paramCount == 0 {
             // is ping
@@ -92,7 +98,10 @@ public class NVASession: Hashable, Equatable {
         }
         _ = try socket.read() // 0x01
         frame.commandLength = try socket.read()
-        frame.command = try String(bytes: socket.read(length: Int(frame.commandLength)).reversed(), encoding: .utf8)!
+        // Payloads come straight off the casting client socket; a non-UTF8/truncated payload must throw
+        // (caught by the read loop as a clean disconnect), not trap and kill the connection thread.
+        guard let command = try String(bytes: socket.read(length: Int(frame.commandLength)).reversed(), encoding: .utf8) else { throw NVAError.decode }
+        frame.command = command
 
         if fst != 0xe0 || frame.paramCount == 1 {
             Logger.debug("reply: \(frame.command)")
@@ -100,13 +109,15 @@ public class NVASession: Hashable, Equatable {
         }
 
         frame.actionLength = try socket.read()
-        frame.action = try String(bytes: socket.read(length: Int(frame.actionLength)), encoding: .utf8)!
+        guard let action = try String(bytes: socket.read(length: Int(frame.actionLength)), encoding: .utf8) else { throw NVAError.decode }
+        frame.action = action
 
         if frame.paramCount == 3 {
             let p3L = try socket.read(length: 4)
             let part3Length = Data(p3L).reversed().withUnsafeBytes({ $0.load(as: UInt32.self) })
             frame.bodyLength = part3Length
-            frame.body = try String(bytes: socket.read(length: Int(frame.bodyLength)), encoding: .utf8)!
+            guard let body = try String(bytes: socket.read(length: Int(frame.bodyLength)), encoding: .utf8) else { throw NVAError.decode }
+            frame.body = body
         }
 
         return frame
@@ -118,49 +129,62 @@ public class NVASession: Hashable, Equatable {
         }
     }
 
+    /// Bumps `currentVersion` and writes the built frame, all on socketQueue, so the version assigned to
+    /// each frame matches the order it is actually sent in (locking the counter alone wouldn't guarantee that).
+    private func send(_ makeFrame: @escaping (UInt32) -> Data) {
+        socketQueue.async { [weak self] in
+            guard let self else { return }
+            self.currentVersion += 1
+            let data = makeFrame(UInt32(self.currentVersion))
+            try? self.socket.writeData(data)
+        }
+    }
+
     func sendReply(content: [String: Any]) {
-        let str = try! JSON(content).rawData()
-        let length = UInt32(str.count)
-        var arr: [UInt8] = [0xc0, 0x01]
-        currentVersion += 1
-        arr.append(contentsOf: UInt32(currentVersion).toUInt8s)
-        arr.append(contentsOf: length.toUInt8s)
-        var data = Data(arr)
-        data.append(str)
-        writeData(data)
+        guard let str = try? JSON(content).rawData() else { return }
+        send { version in
+            var arr: [UInt8] = [0xc0, 0x01]
+            arr.append(contentsOf: version.toUInt8s)
+            arr.append(contentsOf: UInt32(str.count).toUInt8s)
+            var data = Data(arr)
+            data.append(str)
+            return data
+        }
     }
 
     func sendPing() {
-        var arr: [UInt8] = [0xe4, 0x00]
-        currentVersion += 1
-        arr.append(contentsOf: UInt32(currentVersion).toUInt8s)
-        writeData(Data(arr))
+        send { version in
+            var arr: [UInt8] = [0xe4, 0x00]
+            arr.append(contentsOf: version.toUInt8s)
+            return Data(arr)
+        }
     }
 
     func sendCommand(action: String, content: [String: Any]) {
-        let str = try! JSON(content).rawData()
-        let length = UInt32(str.count)
-        var arr = Data([0xe0, 0x03])
-        currentVersion += 1
-        arr.append(contentsOf: UInt32(currentVersion).toUInt8s)
-        let command = "Command".data(using: .ascii)!
-        arr.append(0x01)
-        arr.append(UInt8(command.count))
-        arr.append(command)
-        let actionData = action.data(using: .ascii)!
-        arr.append(UInt8(actionData.count))
-        arr.append(actionData)
-
-        arr.append(contentsOf: length.toUInt8s)
-        arr.append(str)
-        writeData(arr)
+        guard let str = try? JSON(content).rawData(),
+              let command = "Command".data(using: .ascii),
+              let actionData = action.data(using: .ascii)
+        else { return }
+        send { version in
+            var arr = Data([0xe0, 0x03])
+            arr.append(contentsOf: version.toUInt8s)
+            arr.append(0x01)
+            arr.append(UInt8(command.count))
+            arr.append(command)
+            arr.append(UInt8(actionData.count))
+            arr.append(actionData)
+            arr.append(contentsOf: UInt32(str.count).toUInt8s)
+            arr.append(str)
+            return arr
+        }
     }
 
     func sendEmpty() {
-        var arr: [UInt8] = [0xc0, 0x00]
-        currentVersion += 1
-        arr.append(contentsOf: UInt32(currentVersion).toUInt8s)
-        writeData(Data(arr))
+        send { version in
+            var arr: [UInt8] = [0xc0, 0x00]
+            arr.append(contentsOf: version.toUInt8s)
+            return Data(arr)
+        }
     }
 
     let socket: Socket

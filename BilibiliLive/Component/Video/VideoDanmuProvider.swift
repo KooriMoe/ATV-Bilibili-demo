@@ -67,18 +67,21 @@ class VideoDanmuProvider: DanmuProviderProtocol {
     }
 
     func initVideo(cid id: Int, startPos: Int) async {
-        cid = id
-        upDanmus.removeAll()
-        segmentDanmus.removeAll(keepingCapacity: true)
-        segmentStatuses.removeAll(keepingCapacity: true)
-        lastTime = 0
-        lastSegmentIdx = 0
-        upDanmuIdx = 0
-        danmuIdx = 0
+        // All mutable state (dictionaries, indices) is confined to the main thread — the time observer also
+        // runs on .main now — so nothing is touched concurrently. Reset on main before kicking off fetches.
+        await MainActor.run {
+            cid = id
+            upDanmus.removeAll()
+            segmentDanmus.removeAll(keepingCapacity: true)
+            segmentStatuses.removeAll(keepingCapacity: true)
+            lastTime = 0
+            lastSegmentIdx = 0
+            upDanmuIdx = 0
+            danmuIdx = 0
+            segmentStatuses[getSegmentIdx(time: TimeInterval(startPos))] = true
+        }
 
         async let view: () = fetchDanmuView()
-        let segmentIdx = getSegmentIdx(time: TimeInterval(startPos))
-        segmentStatuses[segmentIdx] = true
         async let list: () = fetchDanmuList(getSegmentIdx(time: TimeInterval(startPos)))
         await view
         await list
@@ -97,7 +100,8 @@ class VideoDanmuProvider: DanmuProviderProtocol {
             .filter { $0.command == "#UP#" }
             .map { Danmu(upDm: $0) }
         dms.sort { $0.time < $1.time }
-        upDanmus = dms
+        let finalDms = dms
+        await MainActor.run { upDanmus = finalDms }
 
         Logger.debug("[dm] cid:\(cid!) up danmu cnt: \(dms.count)")
     }
@@ -107,7 +111,7 @@ class VideoDanmuProvider: DanmuProviderProtocol {
         do {
             reply = try await WebRequest.requestDanmuList(cid: cid, segmentIdx: idx)
         } catch let err {
-            segmentStatuses[idx] = nil // 等待下次重试
+            await MainActor.run { segmentStatuses[idx] = nil } // 等待下次重试
             Logger.warn("[dm] cid:\(cid!) sidx:\(idx) requestDanmuList error: \(err)")
             return
         }
@@ -129,7 +133,8 @@ class VideoDanmuProvider: DanmuProviderProtocol {
         var models = dms
             .map { Danmu(dm: $0) }
         models.sort { $0.time < $1.time }
-        segmentDanmus[idx] = models
+        let finalModels = models
+        await MainActor.run { segmentDanmus[idx] = finalModels }
 
         Logger.debug("[dm] cid:\(cid!) sidx:\(idx) danmu cnt: \(dms.count)")
     }
@@ -138,7 +143,7 @@ class VideoDanmuProvider: DanmuProviderProtocol {
     private func fetchMoreDanmuInBackground(time: TimeInterval) {
         func fetchDanmuInBackground(_ idx: Int) {
             segmentStatuses[idx] = true
-            Task.detached {
+            Task {
                 await self.fetchDanmuList(idx)
             }
             Logger.debug("[dm] cid:\(cid!) time:\(Int(time)) fetching sidx:\(idx)")

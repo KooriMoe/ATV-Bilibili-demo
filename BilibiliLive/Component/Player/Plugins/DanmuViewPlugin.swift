@@ -82,9 +82,9 @@ extension DanmuViewPlugin: CommonPlayerPlugin {
         // 保存新的 player 引用
         currentPlayer = player
 
-        // 添加新的 observer 并保存引用
+        // 添加新的 observer 并保存引用。在主线程回调，使弹幕 provider 的可变状态全部限定在主线程，避免数据竞争。
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1, preferredTimescale: 1),
-                                                      queue: DispatchQueue.global())
+                                                      queue: .main)
         { [weak self] time in
             guard let self else { return }
             if !Defaults.shared.showDanmu { return }

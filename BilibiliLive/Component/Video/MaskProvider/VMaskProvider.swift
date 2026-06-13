@@ -79,7 +79,9 @@ class VMaskProvider: MaskProvider {
         let ciImage = CIImage(cvImageBuffer: pixelBuffer)
         queue.async {
             guard let image = self.bodyDetect(buffer: ciImage, videoSize: self.videoSize!) else {
-                self.processing = false
+                // Keep `processing` confined to the main queue (it's read/set in getMask on .main); the
+                // success path already resets it on main, so route the failure path there too.
+                DispatchQueue.main.async { self.processing = false }
                 return
             }
             DispatchQueue.main.async {

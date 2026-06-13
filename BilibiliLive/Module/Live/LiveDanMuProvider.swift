@@ -94,9 +94,14 @@ class LiveDanMuProvider: DanmuProviderProtocol {
 // MARK: Data parse
 
 extension LiveDanMuProvider {
-    private func parseData(data: Data) {
-        let header = LiveWSHeader.decode(data: data)
-        let contentData = data.subdata(in: Int(header.headerSize)..<Int(header.size))
+    private func parseData(data: Data, depth: Int = 0) {
+        // All sizes come from untrusted socket bytes. Validate before slicing (a bad size would trap),
+        // and bound the recursion (brotli payloads + multi-frame tails) so a crafted stream can't blow the stack.
+        guard depth < 32, let header = LiveWSHeader.decode(data: data) else { return }
+        let size = Int(header.size)
+        let headerSize = Int(header.headerSize)
+        guard headerSize >= MemoryLayout<LiveWSHeader>.size, size >= headerSize, size <= data.count else { return }
+        let contentData = data.subdata(in: headerSize..<size)
         let operatorType = OperatorType(rawValue: header.operatorType)
         switch operatorType {
         case nil:
@@ -109,7 +114,7 @@ extension LiveDanMuProvider {
             if header.protocolType == 0 {
                 parseNormalData(data: contentData)
             } else if let data = brotliDcompressor.decompressed(compressed: contentData) {
-                parseData(data: data)
+                parseData(data: data, depth: depth + 1)
             } else {
                 parseNormalData(data: contentData)
             }
@@ -117,9 +122,9 @@ extension LiveDanMuProvider {
             print("get", operatorType?.rawValue ?? 0)
         }
 
-        let nextData = data.dropFirst(Int(header.size))
-        if nextData.count > header.headerSize {
-            parseData(data: Data(nextData))
+        let remaining = data.count - size
+        if remaining >= headerSize {
+            parseData(data: data.subdata(in: size..<data.count), depth: depth + 1)
         }
     }
 
@@ -209,7 +214,9 @@ private struct LiveWSHeader {
         return headerData
     }
 
-    static func decode(data: Data) -> LiveWSHeader {
+    static func decode(data: Data) -> LiveWSHeader? {
+        // Header is 16 bytes; a truncated/malformed frame shorter than that would read out of bounds.
+        guard data.count >= MemoryLayout<LiveWSHeader>.size else { return nil }
         var header = (data as NSData).bytes.bindMemory(to: LiveWSHeader.self, capacity: data.count).pointee
         header.headerSize = header.headerSize.bigEndian
         header.protocolType = header.protocolType.bigEndian
