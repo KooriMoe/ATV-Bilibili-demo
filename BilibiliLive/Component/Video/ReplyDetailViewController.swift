@@ -63,7 +63,7 @@ class ReplyDetailViewController: UIViewController {
     // MARK: - Private
 
     private func jumpLink(bvid: String) {
-        let aid = BvidConvertor.bv2av(bvid: bvid)
+        guard let aid = BvidConvertor.bv2av(bvid: bvid) else { return }
         let detailVC = VideoDetailViewController.create(aid: Int(aid), cid: nil)
         detailVC.present(from: self)
     }

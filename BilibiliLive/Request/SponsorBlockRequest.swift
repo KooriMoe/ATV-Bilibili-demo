@@ -46,7 +46,7 @@ enum SponsorBlockRequest {
             .map({ String(format: "%02x", $0) }).prefix(2).joined()
         let parameters = ["category": Category.sponsor.rawValue]
 
-        let request = AF.request(sponsorBlockAPI + sha256, parameters: parameters)
+        let request = AF.request(sponsorBlockAPI + sha256, parameters: parameters, requestModifier: { $0.timeoutInterval = 10 })
             .serializingDecodable([Infos].self)
         do {
             let response = try await request.value

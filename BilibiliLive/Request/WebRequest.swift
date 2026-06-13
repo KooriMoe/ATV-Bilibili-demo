@@ -20,8 +20,23 @@ enum ValidationError: Error {
     case argumentInvalid(message: String)
 }
 
-enum NoCookieSession {
-    static let session = Session(configuration: URLSessionConfiguration.ephemeral)
+enum BiliSession {
+    // Timeouts must be baked into the configuration before the Session/URLSession is created — mutating
+    // `session.sessionConfiguration` afterwards has no effect on the live URLSession.
+    static let normal: Session = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10
+        config.timeoutIntervalForResource = 10
+        return Session(configuration: config)
+    }()
+
+    static let noCookie: Session = {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpShouldSetCookies = false
+        config.timeoutIntervalForRequest = 10
+        config.timeoutIntervalForResource = 10
+        return Session(configuration: config)
+    }()
 }
 
 enum WebRequest {
@@ -77,13 +92,7 @@ enum WebRequest {
             afheaders.add(HTTPHeader(name: "Referer", value: Keys.referer))
         }
 
-        var session = Session.default
-        if noCookie {
-            session = NoCookieSession.session
-            session.sessionConfiguration.httpShouldSetCookies = false
-        }
-        session.sessionConfiguration.timeoutIntervalForResource = 10
-        session.sessionConfiguration.timeoutIntervalForRequest = 10
+        let session = noCookie ? BiliSession.noCookie : BiliSession.normal
 
         let completionHandler: (AFDataResponse<Data>) -> Void = { response in
             switch response.result {
@@ -515,13 +524,15 @@ extension WebRequest {
         struct SubtitlContenteResp: Codable {
             let body: [SubtitleContent]
         }
-        let resp = try await AF.request(url).serializingDecodable(SubtitlContenteResp.self).value
+        let resp = try await AF.request(url, requestModifier: { $0.timeoutInterval = 10 }).serializingDecodable(SubtitlContenteResp.self).value
         return resp.body
     }
 
     static func requestCid(aid: Int) async throws -> Int {
-        let res = try await requestJSON(url: "https://api.bilibili.com/x/player/pagelist?aid=\(aid)&jsonp=jsonp")
-        let cid = res[0]["cid"].intValue
+        let res = try await requestJSON(url: "https://api.bilibili.com/x/player/pagelist", parameters: ["aid": aid])
+        guard let cid = res.array?.first?["cid"].int, cid > 0 else {
+            throw RequestError.decodeFail(message: "empty pagelist for aid \(aid)")
+        }
         return cid
     }
 

@@ -43,9 +43,14 @@ extension WebRequest {
 
     // https://github.com/SocialSisterYi/bilibili-API-collect/blob/master/docs/misc/sign/wbi.md#Swift
     private static func biliWbiSign(param: String, completion: @escaping (String?) -> Void) {
-        // WebId Cache
+        // WebId Cache. Written from arbitrary URLSession callback queues, so guard access with a lock.
         class WebIdCache {
-            var webId: String?
+            private var _webId: String?
+            private let lock = NSLock()
+            var webId: String? {
+                get { lock.lock(); defer { lock.unlock() }; return _webId }
+                set { lock.lock(); defer { lock.unlock() }; _webId = newValue }
+            }
 
             static let shared = WebIdCache()
         }
@@ -119,30 +124,36 @@ extension WebRequest {
             let currTime = Int(Date().timeIntervalSince1970)
             params["wts"] = currTime
 
-            // Keep parameters as sorted array for query generation
-            let sortedParams = params.sorted { $0.key < $1.key }
+            // The reference WBI algorithm signs over URL-ENCODED values. Strip the chars it drops, then
+            // percent-encode, so values containing spaces / Chinese / & = (e.g. search keywords) hash the
+            // same way the server recomputes them. ASCII-only params are unaffected.
+            func encoded(_ value: Any) -> String {
+                let filtered = String(describing: value).filter { !"!'()*".contains($0) }
+                return filtered.addingPercentEncoding(withAllowedCharacters: .afURLQueryAllowed) ?? filtered
+            }
 
-            // Generate query string directly from sorted array
+            let sortedParams = params.sorted { $0.key < $1.key }
             let query = sortedParams
-                .map { key, value in
-                    let filteredValue = String(describing: value).filter { !"!'()*".contains($0) }
-                    return "\(key)=\(filteredValue)"
-                }
+                .map { key, value in "\(key)=\(encoded(value))" }
                 .joined(separator: "&")
 
             let wbiSign = calculateMD5(string: query + mixinKey)
-            params["w_rid"] = wbiSign
-            return params
+
+            // Emit the same encoded values so the signed string and the actual request query can't diverge.
+            var signedParams = [String: Any]()
+            for (key, value) in params {
+                signedParams[key] = encoded(value)
+            }
+            signedParams["w_rid"] = wbiSign
+            return signedParams
         }
 
         func getWbiKeys(completion: @escaping (Result<(imgKey: String, subKey: String, refresh: Bool), Error>) -> Void) {
-            if let imgKey = WbiKeysCache.shared.imgKey,
-               let subKey = WbiKeysCache.shared.subKey,
-               let lastUpdate = WbiKeysCache.shared.lastUpdate,
-               Date().timeIntervalSince(lastUpdate) < 60 * 60 * 2,
-               Calendar.current.isDate(Date(), inSameDayAs: lastUpdate)
+            if let keys = WbiKeysCache.shared.currentKeys(),
+               Date().timeIntervalSince(keys.lastUpdate) < 60 * 60 * 2,
+               Calendar.current.isDate(Date(), inSameDayAs: keys.lastUpdate)
             {
-                completion(.success((imgKey, subKey, false)))
+                completion(.success((keys.imgKey, keys.subKey, false)))
                 return
             }
 
@@ -159,9 +170,7 @@ extension WebRequest {
                     let subURL = json["data"]["wbi_img"]["sub_url"].string ?? ""
                     let imgKey = imgURL.components(separatedBy: "/").last?.components(separatedBy: ".").first ?? ""
                     let subKey = subURL.components(separatedBy: "/").last?.components(separatedBy: ".").first ?? ""
-                    WbiKeysCache.shared.imgKey = imgKey
-                    WbiKeysCache.shared.subKey = subKey
-                    WbiKeysCache.shared.lastUpdate = Date()
+                    WbiKeysCache.shared.store(imgKey: imgKey, subKey: subKey, date: Date())
                     completion(.success((imgKey, subKey, true)))
                 case let .failure(error):
                     completion(.failure(error))
@@ -225,15 +234,31 @@ extension WebRequest {
     // MARK: - WbiKeys Cache
 
     class WbiKeysCache {
-        var imgKey: String?
-        var subKey: String?
-        var lastUpdate: Date?
+        private var imgKey: String?
+        private var subKey: String?
+        private var lastUpdate: Date?
+        private let lock = NSLock()
 
         static let shared = WbiKeysCache()
 
         private init() {}
 
+        // Read/written from arbitrary AF callback queues and cleared from the -352 handler — guard all access.
+        func currentKeys() -> (imgKey: String, subKey: String, lastUpdate: Date)? {
+            lock.lock(); defer { lock.unlock() }
+            guard let imgKey, let subKey, let lastUpdate else { return nil }
+            return (imgKey, subKey, lastUpdate)
+        }
+
+        func store(imgKey: String, subKey: String, date: Date) {
+            lock.lock(); defer { lock.unlock() }
+            self.imgKey = imgKey
+            self.subKey = subKey
+            lastUpdate = date
+        }
+
         func clear() {
+            lock.lock(); defer { lock.unlock() }
             imgKey = nil
             subKey = nil
             lastUpdate = nil

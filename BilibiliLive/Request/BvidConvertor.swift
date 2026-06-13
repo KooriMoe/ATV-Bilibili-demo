@@ -34,13 +34,16 @@ enum BvidConvertor {
         return String(decoding: bytes, as: UTF8.self)
     }
 
-    static func bv2av(bvid: String) -> UInt64 {
+    static func bv2av(bvid: String) -> UInt64? {
         let fixedBvid: String
         if bvid.hasPrefix("BV") {
             fixedBvid = bvid
         } else {
             fixedBvid = "BV" + bvid
         }
+        // Validate length up front: too-short input would trap on the swapAt below, and an unknown char
+        // used to be silently skipped, producing a plausible-but-wrong aid (loading the wrong video).
+        guard fixedBvid.utf8.count == BV_LEN else { return nil }
         var bvidArray = Array(fixedBvid.utf8)
 
         bvidArray.swapAt(3, 9)
@@ -51,9 +54,8 @@ enum BvidConvertor {
         var tmp: UInt64 = 0
 
         for char in trimmedBvid {
-            if let idx = data.firstIndex(of: char.utf8.first!) {
-                tmp = tmp * BASE + UInt64(idx)
-            }
+            guard let byte = char.utf8.first, let idx = data.firstIndex(of: byte) else { return nil }
+            tmp = tmp * BASE + UInt64(idx)
         }
 
         return (tmp & MASK_CODE) ^ XOR_CODE

@@ -92,17 +92,13 @@ enum ApiRequest {
             switch response.result {
             case let .success(data):
                 let json = JSON(data)
-                print(json)
                 let errorCode = json["code"].intValue
                 if errorCode != 0 {
-                    if errorCode == -101 {
-                        AccountManager.shared.handleAuthenticationFailure()
-                        if !AccountManager.shared.isLoggedIn {
-                            AppDelegate.shared.showLogin()
-                        }
-                    }
                     let message = json["message"].stringValue
                     print(errorCode, message)
+                    if errorCode == -101 {
+                        handleTokenExpired(failedURL: url)
+                    }
                     complete?(.failure(.statusFail(code: errorCode, message: message)))
                     return
                 }
@@ -233,7 +229,7 @@ enum ApiRequest {
         }
     }
 
-    static func refreshToken() {
+    static func refreshToken(complete: ((Result<Void, RequestError>) -> Void)? = nil) {
         AF.cancelAllRequests()
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -245,8 +241,40 @@ enum ApiRequest {
                 let cookies = res.cookieInfo.toCookies()
                 CookieHandler.shared.saveCookie(list: cookies)
                 AccountManager.shared.updateActiveAccount(token: res.tokenInfo, cookies: cookies)
+                complete?(.success(()))
             case let .failure(err):
                 print(err)
+                complete?(.failure(err))
+            }
+        }
+    }
+
+    // code -101 = access token expired. The documented remedy is to refresh the token, not to log the
+    // user out (which discards a refresh token that could have silently recovered). Only fall back to
+    // logout if the refresh itself fails, or if the request that -101'd was the refresh call itself.
+    // Alamofire completions run on .main, so `isRefreshingToken` is main-confined (no lock needed).
+    private static var isRefreshingToken = false
+    private static func handleTokenExpired(failedURL: URLConvertible) {
+        let isRefreshRequest = (try? failedURL.asURL())?.absoluteString.hasPrefix(EndPoint.refresh) ?? false
+        if isRefreshRequest {
+            forceLogout()
+            return
+        }
+        guard !isRefreshingToken else { return }
+        isRefreshingToken = true
+        refreshToken { result in
+            isRefreshingToken = false
+            if case .failure = result {
+                forceLogout()
+            }
+        }
+    }
+
+    private static func forceLogout() {
+        AccountManager.shared.handleAuthenticationFailure()
+        if !AccountManager.shared.isLoggedIn {
+            DispatchQueue.main.async {
+                AppDelegate.shared.showLogin()
             }
         }
     }
