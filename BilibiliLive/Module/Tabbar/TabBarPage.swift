@@ -52,6 +52,24 @@ enum TabBarPage: String, CaseIterable, Codable {
         }
     }
 
+    var sidebarSymbolName: String {
+        switch self {
+        case .live: return "dot.radiowaves.left.and.right"
+        case .feed: return "rectangle.stack"
+        case .hot: return "flame"
+        case .ranking: return "chart.bar"
+        case .follows: return "person.2"
+        case .favorite: return "star"
+        case .personal: return "person.crop.circle"
+        case .search: return "magnifyingglass"
+        case .followBangumi: return "tv"
+        case .followUps: return "person.crop.rectangle.stack"
+        case .toView: return "clock.arrow.circlepath"
+        case .history: return "clock"
+        case .weeklyWatch: return "calendar"
+        }
+    }
+
     var isFixedInTabBar: Bool {
         self == .personal
     }

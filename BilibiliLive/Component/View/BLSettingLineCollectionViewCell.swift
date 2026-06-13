@@ -5,12 +5,20 @@
 //  Created by yicheng on 2022/10/29.
 //
 
+import SnapKit
 import UIKit
 
 class BLSettingLineCollectionViewCell: BLMotionCollectionViewCell {
-    let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
+    let effectView = LiquidGlass.visualEffectView(fallback: .light)
     let selectedWhiteView = UIView()
     let titleLabel = UILabel()
+    let iconImageView = UIImageView()
+    private var titleLeadingConstraint: Constraint?
+
+    var icon: UIImage? {
+        didSet { updateIcon() }
+    }
+
     override var isSelected: Bool {
         didSet {
             updateView()
@@ -24,7 +32,7 @@ class BLSettingLineCollectionViewCell: BLMotionCollectionViewCell {
         effectView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
-        effectView.layer.cornerRadius = 10
+        effectView.layer.cornerRadius = 30
         effectView.layer.cornerCurve = .continuous
         effectView.clipsToBounds = true
         selectedWhiteView.backgroundColor = UIColor.white
@@ -33,15 +41,35 @@ class BLSettingLineCollectionViewCell: BLMotionCollectionViewCell {
         selectedWhiteView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
+        iconImageView.contentMode = .scaleAspectFit
+        iconImageView.isHidden = true
+        effectView.contentView.addSubview(iconImageView)
+        iconImageView.snp.makeConstraints { make in
+            make.leading.equalToSuperview().offset(26)
+            make.centerY.equalToSuperview()
+            make.width.height.equalTo(44)
+        }
         effectView.contentView.addSubview(titleLabel)
         titleLabel.snp.makeConstraints { make in
-            make.leading.equalToSuperview().offset(26)
+            titleLeadingConstraint = make.leading.equalToSuperview().offset(26).constraint
             make.trailing.equalToSuperview().offset(20)
             make.top.bottom.equalToSuperview().inset(8)
         }
         titleLabel.textAlignment = .left
         titleLabel.font = UIFont.systemFont(ofSize: 40, weight: .regular)
-        titleLabel.textColor = .black
+        updateView()
+    }
+
+    private func updateIcon() {
+        iconImageView.image = icon
+        let hasIcon = icon != nil
+        iconImageView.isHidden = !hasIcon
+        titleLeadingConstraint?.update(offset: hasIcon ? 90 : 26)
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        icon = nil
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
@@ -50,7 +78,11 @@ class BLSettingLineCollectionViewCell: BLMotionCollectionViewCell {
     }
 
     func updateView() {
-        selectedWhiteView.isHidden = !(isFocused || isSelected)
+        let highlighted = isFocused || isSelected
+        selectedWhiteView.isHidden = !highlighted
+        titleLabel.textColor = highlighted ? .black : .white
+        titleLabel.font = UIFont.systemFont(ofSize: 40, weight: highlighted ? .semibold : .regular)
+        iconImageView.tintColor = highlighted ? .black : .white
     }
 
     static func makeLayout() -> UICollectionViewLayout {

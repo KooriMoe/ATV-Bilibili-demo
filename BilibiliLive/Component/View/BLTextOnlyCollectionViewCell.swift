@@ -9,7 +9,7 @@ import Foundation
 import UIKit
 
 class BLTextOnlyCollectionViewCell: BLMotionCollectionViewCell {
-    private let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+    private let effectView = LiquidGlass.visualEffectView(fallback: .dark)
     private let selectedWhiteView = UIView()
     let titleLabel = UILabel()
 

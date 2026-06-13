@@ -14,6 +14,7 @@ import UIKit
 class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
     struct CellModel {
         let title: String
+        var iconName: String? = nil
         var autoSelect: Bool? = true
         var contentVC: UIViewController? = nil
         var action: (() -> Void)? = nil
@@ -25,6 +26,12 @@ class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
 
     private let leftContainerView: UIView = {
         let view = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    private let sidebarBackground: UIVisualEffectView = {
+        let view = UIVisualEffectView()
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -100,9 +107,9 @@ class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
     func setupData() {
         cellModels.removeAll()
 
-        let setting = CellModel(title: "设置", contentVC: SettingsViewController())
+        let setting = CellModel(title: "设置", iconName: "gearshape", contentVC: SettingsViewController())
         cellModels.append(setting)
-        cellModels.append(CellModel(title: "账号切换", autoSelect: false, action: { [weak self] in
+        cellModels.append(CellModel(title: "账号切换", iconName: "person.crop.rectangle.stack", autoSelect: false, action: { [weak self] in
             let controller = AccountSwitcherViewController()
             controller.modalPresentationStyle = .overFullScreen
             self?.present(controller, animated: true)
@@ -114,7 +121,7 @@ class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
             }
         }
 
-        let logout = CellModel(title: "登出", autoSelect: false) {
+        let logout = CellModel(title: "登出", iconName: "rectangle.portrait.and.arrow.right", autoSelect: false) {
             [weak self] in
             self?.actionLogout()
         }
@@ -124,12 +131,12 @@ class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
     private func makeCellModel(for page: TabBarPage) -> CellModel? {
         let vc = TabBarPageVCFactory.createVC(for: page)
         if page.requirePresentInPersonalPage {
-            return CellModel(title: page.title) { [weak self] in
+            return CellModel(title: page.title, iconName: page.sidebarSymbolName) { [weak self] in
                 self?.present(vc, animated: true)
             }
         }
 
-        return CellModel(title: page.title, contentVC: vc)
+        return CellModel(title: page.title, iconName: page.sidebarSymbolName, contentVC: vc)
     }
 
     func setViewController(vc: UIViewController) {
@@ -196,8 +203,20 @@ class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
         view.addSubview(leftContainerView)
         view.addSubview(contentView)
 
+        leftContainerView.addSubview(sidebarBackground)
         leftContainerView.addSubview(profileContainerView)
         leftContainerView.addSubview(leftCollectionView)
+
+        sidebarBackground.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
+
+        LiquidGlass.upgrade(sidebarBackground)
+        if #available(tvOS 26.0, *) {
+            sidebarBackground.layer.cornerRadius = 36
+            sidebarBackground.layer.cornerCurve = .continuous
+            sidebarBackground.clipsToBounds = true
+        }
 
         profileContainerView.addSubview(avatarImageView)
         profileContainerView.addSubview(usernameLabel)
@@ -205,15 +224,20 @@ class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
         leftCollectionView.delegate = self
         leftCollectionView.dataSource = self
 
+        let sidebarInset: CGFloat = {
+            if #available(tvOS 26.0, *) { return 30 }
+            return 0
+        }()
+
         leftContainerView.snp.makeConstraints { make in
-            make.leading.equalToSuperview()
-            make.top.equalTo(view.safeAreaLayoutGuide.snp.top)
-            make.bottom.equalToSuperview()
+            make.leading.equalToSuperview().offset(sidebarInset)
+            make.top.equalTo(view.safeAreaLayoutGuide.snp.top).offset(sidebarInset)
+            make.bottom.equalToSuperview().offset(-sidebarInset)
             make.width.equalTo(500)
         }
 
         contentView.snp.makeConstraints { make in
-            make.leading.equalTo(leftContainerView.snp.trailing).offset(8)
+            make.leading.equalTo(leftContainerView.snp.trailing).offset(sidebarInset > 0 ? 20 : 8)
             make.top.equalTo(view.safeAreaLayoutGuide.snp.top)
             make.trailing.bottom.equalToSuperview()
         }
@@ -245,7 +269,9 @@ class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
 extension PersonalViewController: UICollectionViewDataSource {
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "cell", for: indexPath) as! BLSettingLineCollectionViewCell
-        cell.titleLabel.text = cellModels[indexPath.item].title
+        let model = cellModels[indexPath.item]
+        cell.titleLabel.text = model.title
+        cell.icon = model.iconName.flatMap { UIImage(systemName: $0) }
         return cell
     }
 

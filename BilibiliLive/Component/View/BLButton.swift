@@ -123,7 +123,6 @@ class BLCustomTextButton: BLButton {
 
     override func setup() {
         super.setup()
-        effectView.layer.cornerRadius = 10
         effectView.contentView.addSubview(titleLabel)
         titleLabel.snp.makeConstraints { make in
             make.top.bottom.equalToSuperview().inset(10)
@@ -143,7 +142,7 @@ class BLCustomTextButton: BLButton {
 
 class BLButton: UIControl {
     private var motionEffect: UIInterpolatingMotionEffect!
-    fileprivate let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+    fileprivate let effectView = LiquidGlass.visualEffectView(fallback: .dark)
     private let selectedWhiteView = UIView()
 
     var onPrimaryAction: ((BLButton) -> Void)?
@@ -168,7 +167,7 @@ class BLButton: UIControl {
         selectedWhiteView.isHidden = !isFocused
         addSubview(effectView)
         effectView.isUserInteractionEnabled = false
-        effectView.layer.cornerRadius = 8
+        effectView.layer.cornerCurve = .continuous
         effectView.clipsToBounds = true
         effectView.snp.makeConstraints { make in
             make.top.leading.trailing.equalToSuperview()
@@ -179,6 +178,11 @@ class BLButton: UIControl {
         selectedWhiteView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        effectView.layer.cornerRadius = effectView.bounds.height / 2
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {

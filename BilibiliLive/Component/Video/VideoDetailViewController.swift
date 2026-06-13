@@ -607,7 +607,26 @@ class BLCardView: TVCardView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        if #available(tvOS 26.0, *) {
+            return
+        }
         cardBackgroundColor = UIColor(named: "bgColor")
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        if #available(tvOS 26.0, *) {
+            let focused = context.nextFocusedView == self
+            coordinator.addCoordinatedAnimations { [weak self] in
+                guard let self else { return }
+                self.transform = focused ? CGAffineTransform(scaleX: 1.04, y: 1.04) : .identity
+                self.layer.shadowColor = UIColor.black.cgColor
+                self.layer.shadowOpacity = focused ? 0.25 : 0
+                self.layer.shadowRadius = focused ? 24 : 0
+                self.layer.shadowOffset = CGSize(width: 0, height: focused ? 12 : 0)
+            }
+            return
+        }
+        super.didUpdateFocus(in: context, with: coordinator)
     }
 }
 

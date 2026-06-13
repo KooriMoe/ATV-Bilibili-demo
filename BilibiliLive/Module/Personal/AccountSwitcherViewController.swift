@@ -7,7 +7,7 @@ final class AccountSwitcherViewController: UIViewController {
         case actions
     }
 
-    private let containerView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+    private let containerView = LiquidGlass.visualEffectView(fallback: .dark)
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
     private let closeButton = UIButton(type: .system)

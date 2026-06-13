@@ -14,6 +14,12 @@ class ReplyCell: UICollectionViewCell {
     @IBOutlet var userNameLabel: UILabel!
     @IBOutlet var contenLabel: UILabel!
 
+    override func awakeFromNib() {
+        super.awakeFromNib()
+        userNameLabel.textColor = .secondaryLabel
+        contenLabel.textColor = .label
+    }
+
     func config(replay: Replys.Reply) {
         avatarImageView.kf.setImage(
             with: URL(string: replay.member.avatar),
