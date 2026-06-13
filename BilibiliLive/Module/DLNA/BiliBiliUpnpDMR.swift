@@ -140,8 +140,11 @@ class BiliBiliUpnpDMR: NSObject {
     }
 
     @objc func willEnterForeground() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.startIfNeed()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            // A fast background/foreground flap can fire this after we've gone to background again;
+            // don't restart the server if we're no longer foregrounded.
+            guard UIApplication.shared.applicationState != .background else { return }
+            self?.startIfNeed()
         }
     }
 
@@ -346,7 +349,7 @@ extension BiliBiliUpnpDMR {
     func playLive(roomID: Int) {
         let player = LivePlayerViewController()
         player.room = LiveRoom(title: "", room_id: roomID, uname: "", area_v2_name: "", keyframe: nil, face: nil, cover_from_user: nil)
-        UIViewController.topMostViewController().present(player, animated: true)
+        UIViewController.topMostViewController()?.present(player, animated: true)
     }
 
     func playVideo(json: JSON) {
@@ -360,12 +363,18 @@ extension BiliBiliUpnpDMR {
         } else {
             player = VideoDetailViewController.create(aid: aid, cid: cid)
         }
-        let topMost = UIViewController.topMostViewController()
-        if let _ = AppDelegate.shared.window!.rootViewController?.presentedViewController {
-            AppDelegate.shared.window!.rootViewController?.dismiss(animated: false) {
-                player.present(from: UIViewController.topMostViewController(), direatlyEnterVideo: true)
+        // `window` can be nil if a cast event arrives before the scene connects (common right at launch).
+        guard let root = AppDelegate.shared.window?.rootViewController else {
+            Logger.warn("playVideo: no active window/root yet")
+            return
+        }
+        if root.presentedViewController != nil {
+            root.dismiss(animated: false) {
+                guard let topMost = UIViewController.topMostViewController() else { return }
+                player.present(from: topMost, direatlyEnterVideo: true)
             }
         } else {
+            guard let topMost = UIViewController.topMostViewController() else { return }
             player.present(from: topMost, direatlyEnterVideo: true)
         }
     }
@@ -373,6 +382,9 @@ extension BiliBiliUpnpDMR {
 
 extension BiliBiliUpnpDMR: GCDAsyncUdpSocketDelegate {
     func udpSocket(_ sock: GCDAsyncUdpSocket, didReceive data: Data, fromAddress address: Data, withFilterContext filterContext: Any?) {
+        // Packets can still be delivered on udpQueue during teardown; don't answer discovery once stopped
+        // (the http server is already down, so a reply would advertise a dead endpoint).
+        guard started else { return }
         var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
         address.withUnsafeBytes { (pointer: UnsafeRawBufferPointer) in
             let sockaddrPtr = pointer.bindMemory(to: sockaddr.self)

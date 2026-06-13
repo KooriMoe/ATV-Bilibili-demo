@@ -68,7 +68,9 @@ class FavoriteVideoContentViewController: StandardVideoCollectionViewController<
             VideoDetailViewController.create(seasonId: seasonId).present(from: self)
         } else {
             let vc = VideoDetailViewController.create(aid: record.id, cid: 0)
-            vc.present(from: UIViewController.topMostViewController())
+            if let top = UIViewController.topMostViewController() {
+                vc.present(from: top)
+            }
         }
     }
 }

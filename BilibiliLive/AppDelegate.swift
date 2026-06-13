@@ -5,7 +5,6 @@
 //  Created by Etan on 2021/3/27.
 //
 
-import AVFoundation
 import CocoaLumberjackSwift
 import Kingfisher
 import UIKit

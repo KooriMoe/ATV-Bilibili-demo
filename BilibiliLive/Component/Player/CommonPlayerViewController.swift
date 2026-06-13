@@ -132,9 +132,9 @@ extension CommonPlayerViewController {
         if let player {
             activePlugins.forEach { $0.playerDidChange(player: player) }
             rateObserver = player.observe(\.rate, options: [.old, .new]) {
-                [weak self] _player, obs in
-                DispatchQueue.main.async { [weak self] in
-                    self?.playerRateDidChange(player: player)
+                [weak self] observedPlayer, _ in
+                DispatchQueue.main.async {
+                    self?.playerRateDidChange(player: observedPlayer)
                 }
             }
             if let playItem = player.currentItem {
@@ -216,7 +216,10 @@ extension CommonPlayerViewController: AVPlayerViewControllerDelegate {
                                     restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void)
     {
         isRestoringFromPip = true
-        let presentedViewController = UIViewController.topMostViewController()
+        guard let presentedViewController = UIViewController.topMostViewController() else {
+            completionHandler(false)
+            return
+        }
         guard let containerPlayer = PipRecorder.shared.playingPipViewController.first(where: { $0.playerVC == playerViewController }) else {
             completionHandler(false)
             return
