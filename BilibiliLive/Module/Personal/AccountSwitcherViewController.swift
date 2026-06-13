@@ -52,8 +52,7 @@ final class AccountSwitcherViewController: UIViewController {
     }
 
     private func setupContainer() {
-        containerView.clipsToBounds = true
-        containerView.layer.cornerRadius = 36
+        LiquidGlass.applyCorners(containerView, radius: 36)
         containerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(containerView)
         NSLayoutConstraint.activate([

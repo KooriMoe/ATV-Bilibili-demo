@@ -48,6 +48,12 @@ class BLCustomButton: BLButton {
 
     override func setup() {
         super.setup()
+        // Icon chip: keep a rounded-rect, not the base capsule (effectView is only the square icon area
+        // with the title laid out below it, so height / 2 would over-round it).
+        effectCornerRadius = 8
+        if #available(tvOS 26.0, *) {
+            effectView.cornerConfiguration = .corners(radius: .fixed(8))
+        }
         titleLabel.isUserInteractionEnabled = false
         effectView.contentView.addSubview(imageView)
         imageView.snp.makeConstraints { make in
@@ -142,8 +148,12 @@ class BLCustomTextButton: BLButton {
 
 class BLButton: UIControl {
     private var motionEffect: UIInterpolatingMotionEffect!
-    fileprivate let effectView = LiquidGlass.visualEffectView(fallback: .dark)
+    fileprivate let effectView = LiquidGlass.visualEffectView(fallback: .dark, interactive: true)
     private let selectedWhiteView = UIView()
+
+    /// Fixed corner radius for the glass/blur background. `nil` renders a capsule (height / 2).
+    /// Subclasses set this in `setup()` after `super.setup()`.
+    fileprivate var effectCornerRadius: CGFloat?
 
     var onPrimaryAction: ((BLButton) -> Void)?
 
@@ -167,14 +177,23 @@ class BLButton: UIControl {
         selectedWhiteView.isHidden = !isFocused
         addSubview(effectView)
         effectView.isUserInteractionEnabled = false
-        effectView.layer.cornerCurve = .continuous
-        effectView.clipsToBounds = true
+        if #available(tvOS 26.0, *) {
+            // Glass owns its shape; default to a capsule (subclasses override in their setup()).
+            effectView.cornerConfiguration = .capsule()
+        } else {
+            effectView.layer.cornerCurve = .continuous
+            effectView.clipsToBounds = true
+        }
         effectView.snp.makeConstraints { make in
             make.top.leading.trailing.equalToSuperview()
             make.bottom.equalToSuperview().priority(.high)
         }
         effectView.contentView.addSubview(selectedWhiteView)
         selectedWhiteView.backgroundColor = UIColor.white
+        // The white focus fill sits on the glass/blur. On the glass path the effect view isn't clipped
+        // (clipping would cut its edge highlight/shadow), so the fill must round itself to stay inside.
+        selectedWhiteView.layer.cornerCurve = .continuous
+        selectedWhiteView.clipsToBounds = true
         selectedWhiteView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
@@ -182,7 +201,12 @@ class BLButton: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        effectView.layer.cornerRadius = effectView.bounds.height / 2
+        let radius = effectCornerRadius ?? (effectView.bounds.height / 2)
+        selectedWhiteView.layer.cornerRadius = radius
+        // The glass shape is set once via cornerConfiguration (layer.cornerRadius is ignored for glass);
+        // only the legacy blur path needs the radius recomputed here as the height changes.
+        if #available(tvOS 26.0, *) { return }
+        effectView.layer.cornerRadius = radius
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {

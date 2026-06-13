@@ -9,7 +9,7 @@ import SnapKit
 import UIKit
 
 class BLSettingLineCollectionViewCell: BLMotionCollectionViewCell {
-    let effectView = LiquidGlass.visualEffectView(fallback: .light)
+    let effectView = LiquidGlass.visualEffectView(fallback: .light, interactive: true)
     let selectedWhiteView = UIView()
     let titleLabel = UILabel()
     let iconImageView = UIImageView()
@@ -32,10 +32,12 @@ class BLSettingLineCollectionViewCell: BLMotionCollectionViewCell {
         effectView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
-        effectView.layer.cornerRadius = 30
-        effectView.layer.cornerCurve = .continuous
-        effectView.clipsToBounds = true
+        LiquidGlass.applyCorners(effectView, radius: 30)
         selectedWhiteView.backgroundColor = UIColor.white
+        // On the glass path effectView isn't clipped, so round the white focus fill itself.
+        selectedWhiteView.layer.cornerRadius = 30
+        selectedWhiteView.layer.cornerCurve = .continuous
+        selectedWhiteView.clipsToBounds = true
         selectedWhiteView.isHidden = !isFocused
         effectView.contentView.addSubview(selectedWhiteView)
         selectedWhiteView.snp.makeConstraints { make in
@@ -77,12 +79,20 @@ class BLSettingLineCollectionViewCell: BLMotionCollectionViewCell {
         updateView()
     }
 
+    /// Resting (non-focused) foreground color. White becomes vibrant over glass on tvOS 26, but the
+    /// legacy `.light` blur fallback needs dark text/icons to stay legible.
+    private static var restingColor: UIColor {
+        if #available(tvOS 26.0, *) { return .white }
+        return .black
+    }
+
     func updateView() {
         let highlighted = isFocused || isSelected
         selectedWhiteView.isHidden = !highlighted
-        titleLabel.textColor = highlighted ? .black : .white
+        let resting = Self.restingColor
+        titleLabel.textColor = highlighted ? .black : resting
         titleLabel.font = UIFont.systemFont(ofSize: 40, weight: highlighted ? .semibold : .regular)
-        iconImageView.tintColor = highlighted ? .black : .white
+        iconImageView.tintColor = highlighted ? .black : resting
     }
 
     static func makeLayout() -> UICollectionViewLayout {

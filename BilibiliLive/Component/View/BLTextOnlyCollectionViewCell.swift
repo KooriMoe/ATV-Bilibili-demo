@@ -9,7 +9,7 @@ import Foundation
 import UIKit
 
 class BLTextOnlyCollectionViewCell: BLMotionCollectionViewCell {
-    private let effectView = LiquidGlass.visualEffectView(fallback: .dark)
+    private let effectView = LiquidGlass.visualEffectView(fallback: .dark, interactive: true)
     private let selectedWhiteView = UIView()
     let titleLabel = UILabel()
 
@@ -29,8 +29,7 @@ class BLTextOnlyCollectionViewCell: BLMotionCollectionViewCell {
         titleLabel.textColor = .white
         titleLabel.numberOfLines = 2
         titleLabel.font = UIFont.systemFont(ofSize: 26, weight: .medium)
-        effectView.layer.cornerRadius = 16
-        effectView.clipsToBounds = true
+        LiquidGlass.applyCorners(effectView, radius: 16)
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {

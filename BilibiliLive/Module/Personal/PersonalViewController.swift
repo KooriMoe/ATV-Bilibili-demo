@@ -31,7 +31,9 @@ class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
     }()
 
     private let sidebarBackground: UIVisualEffectView = {
-        let view = UIVisualEffectView()
+        // Glass on tvOS 26, a .dark blur on older OS — without the fallback the sidebar had no backing
+        // material at all on the entire pre-tvOS-26 install base.
+        let view = LiquidGlass.visualEffectView(fallback: .dark)
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -211,11 +213,10 @@ class PersonalViewController: UIViewController, BLTabBarContentVCProtocol {
             make.edges.equalToSuperview()
         }
 
-        LiquidGlass.upgrade(sidebarBackground)
         if #available(tvOS 26.0, *) {
-            sidebarBackground.layer.cornerRadius = 36
-            sidebarBackground.layer.cornerCurve = .continuous
-            sidebarBackground.clipsToBounds = true
+            // Floating glass panel (paired with the 30pt inset below). Glass owns its own shape, so use
+            // cornerConfiguration rather than clipping the layer.
+            sidebarBackground.cornerConfiguration = .corners(radius: .fixed(36))
         }
 
         profileContainerView.addSubview(avatarImageView)
