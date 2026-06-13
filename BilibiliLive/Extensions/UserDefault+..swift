@@ -78,14 +78,19 @@ extension Optional: OptionalProtocol {
 }
 
 extension UserDefaults {
+    // Reuse one coder instead of allocating a fresh JSONDecoder/JSONEncoder on every property-wrapper
+    // access — some of these settings (display style, danmu render options) are read on hot paths.
+    private static let sharedEncoder = JSONEncoder()
+    private static let sharedDecoder = JSONDecoder()
+
     func set<Element: Codable>(codable: Element, forKey key: String) {
-        let data = try? JSONEncoder().encode(codable)
+        let data = try? UserDefaults.sharedEncoder.encode(codable)
         UserDefaults.standard.setValue(data, forKey: key)
     }
 
     func codable<Element: Codable>(forKey key: String) -> Element? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
-        let element = try? JSONDecoder().decode(Element.self, from: data)
+        let element = try? UserDefaults.sharedDecoder.decode(Element.self, from: data)
         return element
     }
 }

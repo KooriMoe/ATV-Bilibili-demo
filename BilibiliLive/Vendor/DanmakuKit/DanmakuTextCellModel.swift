@@ -17,6 +17,12 @@ class DanmakuTextCellModel: DanmakuCellModel, Equatable {
     var color: UIColor = .white
     var font = UIFont.systemFont(ofSize: Settings.danmuSize.size)
 
+    // Snapshot the render settings once at model creation instead of decoding them from UserDefaults on
+    // every per-cell redraw (these never change mid-playback).
+    let alpha = CGFloat(Settings.danmuAlpha.rawValue)
+    let strokeWidth = CGFloat(Settings.danmuStrokeWidth.rawValue)
+    let strokeColor = UIColor(red: 0.2, green: 0.2, blue: 0.2, alpha: CGFloat(Settings.danmuStrokeAlpha.rawValue))
+
     var cellClass: DanmakuCell.Type {
         return DanmakuTextCell.self
     }

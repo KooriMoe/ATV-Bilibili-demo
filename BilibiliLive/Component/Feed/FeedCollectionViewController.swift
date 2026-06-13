@@ -116,7 +116,9 @@ class FeedCollectionViewController: UIViewController {
             var snapshot = NSDiffableDataSourceSnapshot<Section, AnyDispplayData>()
             snapshot.appendSections(Section.allCases)
             snapshot.appendItems(_displayData, toSection: .main)
-            dataSource.apply(snapshot)
+            // Initial load and append-only pagination don't benefit from diff animation; skip the wasted
+            // move/insert animation work (and the animated delete-all during reload).
+            dataSource.apply(snapshot, animatingDifferences: false)
         }
     }
 
@@ -137,7 +139,10 @@ class FeedCollectionViewController: UIViewController {
 
     func appendData(displayData: [any DisplayData]) {
         isLoading = false
-        _displayData.append(contentsOf: displayData.map { AnyDispplayData(data: $0) }.filter({ !_displayData.contains($0) }))
+        // O(n+m) dedup via a Set instead of Array.contains per item (which is O(n*m) and grows each page).
+        var seen = Set(_displayData)
+        let newOnes = displayData.map { AnyDispplayData(data: $0) }.filter { seen.insert($0).inserted }
+        _displayData.append(contentsOf: newOnes)
         if displayData.count < pageSize - 5 || displayData.count == 0 {
             finished = true
             return

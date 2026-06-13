@@ -83,12 +83,11 @@ struct FollowBangumiListData: Codable, Hashable {
             var leftItems = [DisplayOverlay.DisplayOverlayItem]()
             leftItems.append(DisplayOverlay.DisplayOverlayItem(icon: nil, text: index_show))
             var badge: DisplayOverlay.DisplayOverlayBadge?
-            if let pub_time = new_ep?.pub_time {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-                if let date = formatter.date(from: pub_time), Calendar.current.isDateInToday(date) {
-                    badge = .init(text: "更新了!")
-                }
+            if let pub_time = new_ep?.pub_time,
+               let date = DateFormatter.dateTime.date(from: pub_time),
+               Calendar.current.isDateInToday(date)
+            {
+                badge = .init(text: "更新了!")
             }
             return DisplayOverlay(leftItems: leftItems, badge: badge)
         }

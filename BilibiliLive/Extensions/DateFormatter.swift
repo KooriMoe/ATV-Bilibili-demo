@@ -14,6 +14,12 @@ extension DateFormatter {
         return formater
     }()
 
+    static let dateTime = {
+        let formater = DateFormatter()
+        formater.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formater
+    }()
+
     static func stringFor(timestamp: Int?) -> String? {
         guard let timestamp = timestamp else { return nil }
         return date.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))

@@ -169,6 +169,19 @@ class BLOverlayView: UIView {
 
     // MARK: - Helper Methods
 
+    // Cache rendered SF Symbols (pointSize/tint are constant here) so scrolling the feed doesn't re-render
+    // the same icon on every cell reuse.
+    private static var iconCache = [String: UIImage]()
+
+    private func tintedIcon(_ iconName: String) -> UIImage? {
+        if let cached = Self.iconCache[iconName] { return cached }
+        let config = UIImage.SymbolConfiguration(pointSize: 10, weight: .regular)
+        guard let image = UIImage(systemName: iconName, withConfiguration: config)?
+            .withTintColor(.white, renderingMode: .alwaysOriginal) else { return nil }
+        Self.iconCache[iconName] = image
+        return image
+    }
+
     // 创建包含图标和Label的小容器
     private func createInfoItem(icon: String?, text: String) -> UIView {
         let container = UIView()
@@ -181,10 +194,7 @@ class BLOverlayView: UIView {
         container.addSubview(label)
 
         if let iconName = icon {
-            let config = UIImage.SymbolConfiguration(pointSize: 10, weight: .regular)
-            let image = UIImage(systemName: iconName, withConfiguration: config)?
-                .withTintColor(.white, renderingMode: .alwaysOriginal)
-            let imageView = UIImageView(image: image)
+            let imageView = UIImageView(image: tintedIcon(iconName))
 
             container.addSubview(imageView)
 
